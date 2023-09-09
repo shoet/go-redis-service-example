@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "36379:8080"
+  app:
+    build:
+      args:
+        - target=dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    environment:
+      ENV: dev
+      PORT: 8080
+      KVS_HOST: redis
+      KVS_PORT: 6379

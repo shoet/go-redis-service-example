@@ -7,10 +7,11 @@ import (
 )
 
 type Config struct {
-	Env     string `json:"env" envDefault:"dev"`
-	Port    int    `json:"port" envDefault:"8080"`
-	KVSHost string `json:"kvs_host" envDefault:"127.0.0.1"`
-	KVSPort int    `json:"kvs_port" envDefault:"6379"`
+	Env          string `env:"ENV" envDefault:"dev"`
+	Port         int    `env:"PORT" envDefault:"8080"`
+	KVSHost      string `env:"KVS_HOST" envDefault:"127.0.0.1"`
+	KVSPort      int    `env:"KVS_PORT" envDefault:"6379"`
+	KVSExpireSec int    `env:"KVS_EXPIRE_SEC" envDefault:"86400"`
 }
 
 func NewConfig() (*Config, error) {
