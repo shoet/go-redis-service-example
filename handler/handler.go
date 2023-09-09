@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/go-playground/validator/v10"
 )
 
 type Index struct{}
@@ -13,6 +15,36 @@ func (*Index) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Message string `json:"message"`
 	}{
 		Message: "Hello, World!",
+	}
+	RespondJSON(w, http.StatusOK, resp)
+}
+
+type Login struct {
+	Service   LoginService
+	Validator *validator.Validate
+}
+
+func (l *Login) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body struct {
+		Username string `json:"username" validate:"required"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		RespondJSON(w, http.StatusInternalServerError, &ErrorResponse{Message: err.Error()})
+		return
+	}
+	if err := l.Validator.Struct(&body); err != nil {
+		RespondJSON(w, http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+		return
+	}
+	if err := l.Service.Login(ctx, body.Username); err != nil {
+		RespondJSON(w, http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		return
+	}
+	resp := struct {
+		Name string `json:"name"`
+	}{
+		Name: body.Username,
 	}
 	RespondJSON(w, http.StatusOK, resp)
 }

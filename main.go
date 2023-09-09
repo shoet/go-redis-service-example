@@ -22,7 +22,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
-	mux := handler.NewMux()
+	mux := handler.NewMux(cfg)
 	s := NewServer(l, mux)
 	return s.Run(ctx)
 }
