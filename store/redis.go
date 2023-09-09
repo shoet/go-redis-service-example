@@ -17,7 +17,7 @@ type RedisClient struct {
 func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 	res := r.redis.Get(ctx, key)
 	if err := res.Err(); err != nil {
-		return "", fmt.Errorf("failed to get: %w", err)
+		return "", fmt.Errorf("failed to get: %v", err)
 	}
 	return res.Val(), nil
 }

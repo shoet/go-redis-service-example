@@ -9,6 +9,7 @@ import (
 	"github.com/shoet/go-redis-service-example/config"
 	"github.com/shoet/go-redis-service-example/service"
 	"github.com/shoet/go-redis-service-example/store"
+	"github.com/shoet/go-redis-service-example/util"
 )
 
 func NewMux(ctx context.Context, cfg *config.Config) (http.Handler, error) {
@@ -20,14 +21,20 @@ func NewMux(ctx context.Context, cfg *config.Config) (http.Handler, error) {
 		return nil, err
 	}
 
+	jwt := &util.JWT{
+		JwtSecret: cfg.TOKENSECRETS,
+		KVStore:   kvs,
+	}
+
 	idx := &Index{}
-	router.Get("/", idx.ServeHTTP)
+	router.Get("/", jwt.AuthGuardMiddleware(idx).ServeHTTP)
 
 	l := &Login{
 		Service: &service.LoginService{
 			Store: kvs,
 		},
 		Validator: validator,
+		JWT:       jwt,
 	}
 	router.Post("/login", l.ServeHTTP)
 
