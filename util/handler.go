@@ -11,6 +11,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/shoet/go-redis-service-example/errorutil"
+	"github.com/shoet/go-redis-service-example/store"
 	"golang.org/x/net/context"
 )
 
@@ -33,6 +34,7 @@ func RespondJSON(w http.ResponseWriter, statusCode int, body any) {
 
 type JWT struct {
 	JwtSecret string
+	KVStore   store.KVStore
 }
 
 func (j *JWT) GenerateJWT(ctx context.Context, username string) (string, error) {
@@ -54,12 +56,12 @@ func (j *JWT) GenerateJWT(ctx context.Context, username string) (string, error) 
 	return string(signed), nil
 }
 
-func (j *JWT) ValidateJWT(token string) (bool, error) {
-	_, err := jwt.Parse([]byte(token), jwt.WithKey(jwa.HS256, []byte(j.JwtSecret)), jwt.WithValidate(true))
+func (j *JWT) ValidateJWT(token string) (jwt.Token, error) {
+	parsed, err := jwt.Parse([]byte(token), jwt.WithKey(jwa.HS256, []byte(j.JwtSecret)), jwt.WithValidate(true))
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return true, nil
+	return parsed, nil
 
 }
 
@@ -77,19 +79,32 @@ func (j *JWT) AuthGuardMiddleware(next http.Handler) http.Handler {
 			RespondJSON(w, http.StatusInternalServerError, errResp)
 			return
 		}
-		isValid, err := j.ValidateJWT(token.Value)
+		t, err := j.ValidateJWT(token.Value)
+		if err != nil {
+			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageInternalServerError}
+			RespondJSON(w, http.StatusInternalServerError, errResp)
+			return
+		}
+		username, exists := t.Get("username")
+		if exists == false {
+			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
+			RespondJSON(w, http.StatusUnauthorized, errResp)
+			return
+		}
+		ret, err := j.KVStore.Get(r.Context(), username.(string))
 		if err != nil {
 			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
 			RespondJSON(w, http.StatusUnauthorized, errResp)
 			return
 		}
-		if !isValid {
-			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageInternalServerError}
-			RespondJSON(w, http.StatusInternalServerError, errResp)
+		fmt.Println("ret")
+		fmt.Println(ret)
+		if ret == "" {
+			w.Header().Set("Set-Cookie", "auth-token=; Max-Age=0")
+			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
+			RespondJSON(w, http.StatusUnauthorized, errResp)
 			return
 		}
-		// TODO: redis 検索
-		// TODO: cookie reset
 		next.ServeHTTP(w, r)
 	})
 }

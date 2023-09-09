@@ -21,7 +21,10 @@ func NewMux(ctx context.Context, cfg *config.Config) (http.Handler, error) {
 		return nil, err
 	}
 
-	jwt := &util.JWT{JwtSecret: cfg.TOKENSECRETS}
+	jwt := &util.JWT{
+		JwtSecret: cfg.TOKENSECRETS,
+		KVStore:   kvs,
+	}
 
 	idx := &Index{}
 	router.Get("/", jwt.AuthGuardMiddleware(idx).ServeHTTP)
