@@ -4,19 +4,46 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/shoet/go-redis-service-example/errorutil"
+	"github.com/shoet/go-redis-service-example/util"
 )
 
 type Index struct{}
 
 func (*Index) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	AuthGuard(w, r)
 	resp := struct {
 		Message string `json:"message"`
 	}{
 		Message: "Hello, World!",
 	}
-	RespondJSON(w, http.StatusOK, resp)
+	util.RespondJSON(w, http.StatusOK, resp)
+}
+
+func AuthGuard(w http.ResponseWriter, r *http.Request) {
+	// tokenが無い、redisでのセッション切れはguardする
+	token, err := r.Cookie("auth-token")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
+			util.RespondJSON(w, http.StatusUnauthorized, errResp)
+			return
+		}
+		log.Printf("failed to get cookie: %v", err)
+		errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageInternalServerError}
+		util.RespondJSON(w, http.StatusInternalServerError, errResp)
+		return
+	}
+	// TODO: token 検証
+	if !util.ValidateJWT(token.Value) {
+		errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
+		util.RespondJSON(w, http.StatusUnauthorized, errResp)
+	}
+	// TODO: redis 検索
+	// TODO: cookie reset
 }
 
 type Login struct {
@@ -30,15 +57,15 @@ func (l *Login) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username" validate:"required"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		RespondJSON(w, http.StatusInternalServerError, &ErrorResponse{Message: err.Error()})
+		util.RespondJSON(w, http.StatusInternalServerError, errorutil.ErrorResponse{Message: err.Error()})
 		return
 	}
 	if err := l.Validator.Struct(&body); err != nil {
-		RespondJSON(w, http.StatusBadRequest, ErrorResponse{Message: err.Error()})
+		util.RespondJSON(w, http.StatusBadRequest, errorutil.ErrorResponse{Message: err.Error()})
 		return
 	}
 	if err := l.Service.Login(ctx, body.Username); err != nil {
-		RespondJSON(w, http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+		util.RespondJSON(w, http.StatusInternalServerError, errorutil.ErrorResponse{Message: err.Error()})
 		return
 	}
 	resp := struct {
@@ -46,7 +73,11 @@ func (l *Login) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}{
 		Name: body.Username,
 	}
-	RespondJSON(w, http.StatusOK, resp)
+	expire := time.Now()
+	expire = expire.AddDate(0, 0, 1)
+	cookie := http.Cookie{Name: "auth-token", Value: "test", Expires: expire}
+	w.Header().Set("Set-Cookie", cookie.String())
+	util.RespondJSON(w, http.StatusOK, resp)
 }
 
 type NotFound struct{}
@@ -55,31 +86,7 @@ func (*NotFound) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
 		Message string `json:"message"`
 	}{
-		Message: ErrorMessageNotFound,
+		Message: errorutil.ErrorMessageNotFound,
 	}
-	RespondJSON(w, http.StatusNotFound, resp)
-}
-
-type ErrorResponse struct {
-	Message string `json:"message"`
-}
-
-const ErrorMessageNotFound = "Not Found"
-const ErrorMessageInternalServerError = "Internal Server Error"
-
-func RespondJSON(w http.ResponseWriter, statusCode int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		errResp := ErrorResponse{Message: ErrorMessageInternalServerError}
-		err := json.NewEncoder(w).Encode(errResp)
-		if err != nil {
-			log.Printf("failed to encode error response: %v", err)
-		}
-		return
-	}
-	w.WriteHeader(statusCode)
-	w.Write(jsonBody)
-	return
+	util.RespondJSON(w, http.StatusNotFound, resp)
 }

@@ -31,4 +31,15 @@ func TestLogin(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status code %d, got %d", http.StatusOK, resp.StatusCode)
 	}
+	AssertCookieToken(t, "auth-token", resp)
+}
+
+func AssertCookieToken(t *testing.T, tokenName string, resp *http.Response) {
+	t.Helper()
+	for _, c := range resp.Cookies() {
+		if c.Name == tokenName {
+			return
+		}
+	}
+	t.Errorf("expected cookie token got cookies %v", resp.Cookies())
 }

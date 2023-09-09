@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,11 +11,14 @@ import (
 	"github.com/shoet/go-redis-service-example/store"
 )
 
-func NewMux(cfg *config.Config) http.Handler {
+func NewMux(ctx context.Context, cfg *config.Config) (http.Handler, error) {
 	router := chi.NewRouter()
 
 	validator := validator.New()
-	kvs := store.NewRedisClient(cfg)
+	kvs, err := store.NewRedisClient(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	idx := &Index{}
 	router.Get("/", idx.ServeHTTP)
@@ -30,5 +34,5 @@ func NewMux(cfg *config.Config) http.Handler {
 	nf := &NotFound{}
 	router.NotFound(nf.ServeHTTP)
 
-	return router
+	return router, nil
 }

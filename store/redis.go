@@ -30,7 +30,7 @@ func (r *RedisClient) Set(ctx context.Context, key string, value string) error {
 	return nil
 }
 
-func NewRedisClient(cfg *config.Config) *RedisClient {
+func NewRedisClient(ctx context.Context, cfg *config.Config) (*RedisClient, error) {
 	r := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.KVSHost, cfg.KVSPort),
 		Password: "",
@@ -41,7 +41,11 @@ func NewRedisClient(cfg *config.Config) *RedisClient {
 		redis:     r,
 		expireSec: cfg.KVSExpireSec,
 	}
-	return c
+	resp := c.redis.Ping(ctx)
+	if resp.Err() != nil {
+		return nil, fmt.Errorf("failed to connect redis: %v", resp.Err())
+	}
+	return c, nil
 }
 
 type KVStore interface {
