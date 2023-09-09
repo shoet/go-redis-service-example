@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -26,6 +29,8 @@ func NewServer(l net.Listener, mux http.Handler) *Server {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
@@ -34,6 +39,12 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		return nil
 	})
+
+	<-ctx.Done()
+	if err := s.srv.Shutdown(context.Background()); err != nil {
+		return fmt.Errorf("failed to shutdown: %w", err)
+	}
+	fmt.Println("shutdown server")
 
 	return eg.Wait()
 }

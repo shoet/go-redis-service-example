@@ -18,6 +18,7 @@ func run() error {
 	}
 
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
+	fmt.Printf("listen on http://%s\n", l.Addr().String())
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
