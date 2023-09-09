@@ -62,3 +62,34 @@ func (j *JWT) ValidateJWT(token string) (bool, error) {
 	return true, nil
 
 }
+
+func (j *JWT) AuthGuardMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// tokenが無い、redisでのセッション切れはguardする
+		token, err := r.Cookie("auth-token")
+		if err != nil {
+			if err == http.ErrNoCookie {
+				errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
+				RespondJSON(w, http.StatusUnauthorized, errResp)
+				return
+			}
+			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageInternalServerError}
+			RespondJSON(w, http.StatusInternalServerError, errResp)
+			return
+		}
+		isValid, err := j.ValidateJWT(token.Value)
+		if err != nil {
+			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
+			RespondJSON(w, http.StatusUnauthorized, errResp)
+			return
+		}
+		if !isValid {
+			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageInternalServerError}
+			RespondJSON(w, http.StatusInternalServerError, errResp)
+			return
+		}
+		// TODO: redis 検索
+		// TODO: cookie reset
+		next.ServeHTTP(w, r)
+	})
+}

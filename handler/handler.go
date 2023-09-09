@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 type Index struct{}
 
 func (*Index) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	AuthGuard(w, r)
 	resp := struct {
 		Message string `json:"message"`
 	}{
@@ -23,32 +21,10 @@ func (*Index) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	util.RespondJSON(w, http.StatusOK, resp)
 }
 
-func AuthGuard(w http.ResponseWriter, r *http.Request) {
-	// tokenが無い、redisでのセッション切れはguardする
-	token, err := r.Cookie("auth-token")
-	if err != nil {
-		if err == http.ErrNoCookie {
-			errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
-			util.RespondJSON(w, http.StatusUnauthorized, errResp)
-			return
-		}
-		log.Printf("failed to get cookie: %v", err)
-		errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageInternalServerError}
-		util.RespondJSON(w, http.StatusInternalServerError, errResp)
-		return
-	}
-	// TODO: token 検証
-	if !util.ValidateJWT(token.Value) {
-		errResp := errorutil.ErrorResponse{Message: errorutil.ErrorMessageUnauthorized}
-		util.RespondJSON(w, http.StatusUnauthorized, errResp)
-	}
-	// TODO: redis 検索
-	// TODO: cookie reset
-}
-
 type Login struct {
 	Service   LoginService
 	Validator *validator.Validate
+	JWT       *util.JWT
 }
 
 func (l *Login) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -68,15 +44,24 @@ func (l *Login) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		util.RespondJSON(w, http.StatusInternalServerError, errorutil.ErrorResponse{Message: err.Error()})
 		return
 	}
+	expire := time.Now()
+	expire = expire.AddDate(0, 0, 1)
+	token, err := l.JWT.GenerateJWT(ctx, body.Username)
+	if err != nil {
+		util.RespondJSON(
+			w,
+			http.StatusInternalServerError,
+			errorutil.ErrorResponse{Message: err.Error()},
+		)
+		return
+	}
+	cookie := http.Cookie{Name: "auth-token", Value: token, Expires: expire}
+	w.Header().Set("Set-Cookie", cookie.String())
 	resp := struct {
 		Name string `json:"name"`
 	}{
 		Name: body.Username,
 	}
-	expire := time.Now()
-	expire = expire.AddDate(0, 0, 1)
-	cookie := http.Cookie{Name: "auth-token", Value: "test", Expires: expire}
-	w.Header().Set("Set-Cookie", cookie.String())
 	util.RespondJSON(w, http.StatusOK, resp)
 }
 
